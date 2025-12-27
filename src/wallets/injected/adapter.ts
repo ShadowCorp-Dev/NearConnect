@@ -141,16 +141,28 @@ export class InjectedWalletAdapter implements NearWalletBase {
   async signAndSendTransaction(
     params: SignAndSendTransactionParams
   ): Promise<FinalExecutionOutcome> {
+    // Method 1: Direct signAndSendTransaction
     if (typeof this.provider.signAndSendTransaction === 'function') {
       return await this.provider.signAndSendTransaction(params);
     }
 
-    // Some wallets nest params differently
-    if (typeof this.provider.signAndSendTransaction === 'function') {
-      return await this.provider.signAndSendTransaction({
-        receiverId: params.receiverId,
-        actions: params.actions,
-      });
+    // Method 2: Meteor SDK pattern - get account() then call signAndSendTransaction
+    // Meteor's account() returns ConnectedMeteorWalletAccount with signing methods
+    if (typeof this.provider.account === 'function') {
+      const account = await this.provider.account();
+      if (account && typeof account.signAndSendTransaction === 'function') {
+        return await account.signAndSendTransaction({
+          receiverId: params.receiverId,
+          actions: params.actions,
+        });
+      }
+      // Meteor also has signAndSendTransaction_direct for wallet-based signing
+      if (account && typeof account.signAndSendTransaction_direct === 'function') {
+        return await account.signAndSendTransaction_direct({
+          receiverId: params.receiverId,
+          actions: params.actions,
+        });
+      }
     }
 
     throw new Error(
@@ -214,13 +226,29 @@ export class InjectedWalletAdapter implements NearWalletBase {
    * Check if connected
    */
   async isConnected(): Promise<boolean> {
-    if (typeof this.provider.isConnected === 'function') {
-      return await this.provider.isConnected();
-    }
+    // Meteor SDK uses isSignedIn()
     if (typeof this.provider.isSignedIn === 'function') {
       return await this.provider.isSignedIn();
     }
+    if (typeof this.provider.isConnected === 'function') {
+      return await this.provider.isConnected();
+    }
     return this.cachedAccounts.length > 0;
+  }
+
+  /**
+   * Verify account ownership (NEP-413 alternative)
+   * Meteor SDK supports this as a separate method
+   */
+  async verifyOwner(params: { message: string }): Promise<{
+    accountId: string;
+    publicKey: string;
+    signature: string;
+  }> {
+    if (typeof this.provider.verifyOwner === 'function') {
+      return await this.provider.verifyOwner(params);
+    }
+    throw new Error(`${this.manifest.name} does not support verifyOwner`);
   }
 
   /**

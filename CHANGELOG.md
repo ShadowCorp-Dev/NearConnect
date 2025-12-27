@@ -2,6 +2,17 @@
 
 All notable changes to NearConnect will be documented in this file.
 
+## [1.0.6]
+
+### Changed
+
+- **Improved Meteor SDK compatibility** - Adapter now matches Meteor's actual API patterns:
+  - Use `account().signAndSendTransaction()` pattern for transactions
+  - Support `signAndSendTransaction_direct()` for wallet-delegated signing
+  - Check `isSignedIn()` before `isConnected()` for connection status
+  - Added `verifyOwner()` method as separate capability
+  - Detector now validates Meteor-specific methods: `isSignedIn`, `getAccountId`, `account`
+
 ## [1.0.5]
 
 ### Fixed

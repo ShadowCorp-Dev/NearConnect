@@ -253,12 +253,16 @@ export class InjectedWalletDetector {
     const provider = obj as Record<string, unknown>;
 
     // Most wallet providers have at least one of these methods
+    // Meteor SDK uses: requestSignIn, isSignedIn, getAccountId, account, signMessage
     return (
       typeof provider.connect === 'function' ||
       typeof provider.signIn === 'function' ||
       typeof provider.requestSignIn === 'function' ||
       typeof provider.signAndSendTransaction === 'function' ||
       typeof provider.isConnected === 'function' ||
+      typeof provider.isSignedIn === 'function' || // Meteor
+      typeof provider.getAccountId === 'function' || // Meteor
+      typeof provider.account === 'function' || // Meteor
       typeof provider.enable === 'function'
     );
   }
