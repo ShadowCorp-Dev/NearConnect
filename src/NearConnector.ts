@@ -216,6 +216,29 @@ export class NearConnector {
     });
   }
 
+  /**
+   * Initialize the connector and wait for manifest + session restoration.
+   * This is the recommended way to set up the connector.
+   * Returns the restored session if one exists, null otherwise.
+   */
+  async init(): Promise<Session | null> {
+    try {
+      await this.whenManifestLoaded;
+      const session = await this.whenSessionRestored;
+      return session;
+    } catch (e) {
+      this.logger?.log("Initialization error (non-fatal)", e);
+      return null;
+    }
+  }
+
+  /**
+   * Check if the connector is ready (manifest loaded).
+   */
+  get isReady(): boolean {
+    return this.manifest.wallets.length > 0;
+  }
+
   get availableWallets() {
     const wallets = this.wallets.filter((wallet) => {
       return Object.entries(this.features).every(([key, value]) => {
@@ -380,6 +403,33 @@ export class NearConnector {
     }
   }
 
+  /**
+   * Try to get the connected wallet without throwing.
+   * Returns null if no wallet is connected or no accounts found.
+   * Use this for checking connection state safely.
+   */
+  async tryGetConnectedWallet(): Promise<{ wallet: NearWalletBase; accounts: Account[] } | null> {
+    try {
+      await this.whenManifestLoaded.catch(() => {});
+      const id = await this.storage.get("selected-wallet");
+      if (!id) return null;
+
+      const wallet = this.wallets.find((wallet) => wallet.manifest.id === id);
+      if (!wallet) return null;
+
+      const accounts = await wallet.getAccounts();
+      if (!accounts?.length) return null;
+
+      return { wallet, accounts };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Get the connected wallet. Throws if no wallet is connected.
+   * For a non-throwing version, use tryGetConnectedWallet().
+   */
   async getConnectedWallet() {
     await this.whenManifestLoaded.catch(() => {});
     const id = await this.storage.get("selected-wallet");
@@ -402,6 +452,14 @@ export class NearConnector {
     }
 
     return { wallet, accounts };
+  }
+
+  /**
+   * Check if a wallet is currently connected (non-throwing).
+   */
+  async isConnected(): Promise<boolean> {
+    const result = await this.tryGetConnectedWallet();
+    return result !== null;
   }
 
   async wallet(id?: string | null): Promise<NearWalletBase> {

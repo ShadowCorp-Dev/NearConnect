@@ -2,6 +2,20 @@
 
 All notable changes to NearConnect will be documented in this file.
 
+## [1.0.2]
+
+### Added
+
+- **`init()` method** - Proper async initialization that waits for manifest and session restoration
+- **`tryGetConnectedWallet()`** - Non-throwing version that returns `null` if no wallet connected
+- **`isConnected()`** - Simple boolean check for connection state
+- **`isReady` getter** - Check if connector is ready (manifest loaded)
+
+### Fixed
+
+- **Initialization errors** - `getConnectedWallet()` no longer breaks initialization when no previous session exists
+- Graceful handling of missing sessions during startup
+
 ## [1.0.1]
 
 ### Fixed
