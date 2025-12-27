@@ -2,6 +2,16 @@
 
 All notable changes to NearConnect will be documented in this file.
 
+## [1.0.1]
+
+### Fixed
+
+- **WalletConnect optional dependency** - Fixed bundler error when `@walletconnect/sign-client` is not installed
+  - Added `@vite-ignore` and `webpackIgnore` comments to prevent static analysis
+  - Use variable for module name to prevent bundler resolution
+  - Added try-catch with helpful error message
+  - Declared as optional peer dependency in package.json
+
 ## [1.0.0] 
 
 ### Overview
