@@ -268,7 +268,50 @@ class SandboxExecutor {
       iframe.postMessage({ ...event.data, status: "success", result: null });
       return;
     }
+
+    // Meteor extension bridge: forward messages to/from window.meteorCom
+    // This allows sandboxed Meteor executor to use the extension instead of popup
+    if (event.data.method === "meteorCom.sendMessageData") {
+      const win = window as unknown as { meteorCom?: { sendMessageData: (data: unknown) => void } };
+      if (win.meteorCom && typeof win.meteorCom.sendMessageData === "function") {
+        win.meteorCom.sendMessageData(event.data.params.data);
+        success(null);
+      } else {
+        // Extension not available - let the SDK handle fallback to popup
+        failed("meteorCom not available");
+      }
+      return;
+    }
   };
+
+  // Set up meteorCom listener bridge when executor is created
+  private meteorComListenerSetup = false;
+  private setupMeteorComBridge(iframe: IframeExecutor) {
+    if (this.meteorComListenerSetup) return;
+
+    const win = window as unknown as {
+      meteorCom?: {
+        addMessageDataListener: (listener: (data: unknown) => void) => void;
+      };
+    };
+
+    if (win.meteorCom && typeof win.meteorCom.addMessageDataListener === "function") {
+      win.meteorCom.addMessageDataListener((data: unknown) => {
+        // Forward meteorCom messages to the iframe
+        try {
+          iframe.postMessage({
+            method: "meteorCom:message",
+            payload: data,
+            origin: iframe.origin,
+          });
+        } catch {
+          // Iframe may be disposed
+        }
+      });
+      this.meteorComListenerSetup = true;
+      this.connector.logger?.log("[meteorCom bridge] Listener registered");
+    }
+  }
 
   private actualCode: string | null = null;
   async checkNewVersion(executor: SandboxExecutor, currentVersion: string | null) {
@@ -316,6 +359,9 @@ class SandboxExecutor {
 
     const iframe = new IframeExecutor(this, code, this._onMessage);
     this.connector.logger?.log(`Code loaded, iframe initialized`);
+
+    // Set up meteorCom bridge for Meteor extension support
+    this.setupMeteorComBridge(iframe);
 
     await iframe.readyPromise;
     this.connector.logger?.log(`Iframe ready`);

@@ -278,11 +278,11 @@ async function getIframeCode(args: { id: string; executor: SandboxExecutor; code
           async set(key, value) {
             await window.selector.call("storage.set", { key, value });
           },
-      
+
           async get(key) {
             return await window.selector.call("storage.get", { key });
           },
-      
+
           async remove(key) {
             await window.selector.call("storage.remove", { key });
           },
@@ -292,6 +292,36 @@ async function getIframeCode(args: { id: string; executor: SandboxExecutor; code
           },
         },
       };
+
+      // Meteor extension bridge: proxy window.meteorCom to parent window
+      // This allows the Meteor SDK inside the sandbox to use the extension
+      // instead of falling back to popup mode
+      window.meteorCom = (() => {
+        const listeners = [];
+
+        // Listen for messages from parent that are meteorCom responses
+        window.addEventListener("message", (event) => {
+          if (event.data.origin !== "${uuid}") return;
+          if (event.data.method !== "meteorCom:message") return;
+          // Forward to all registered listeners
+          listeners.forEach(listener => {
+            try {
+              listener(event.data.payload);
+            } catch (e) {
+              console.error("[meteorCom proxy] listener error:", e);
+            }
+          });
+        });
+
+        return {
+          sendMessageData: (data) => {
+            window.selector.call("meteorCom.sendMessageData", { data });
+          },
+          addMessageDataListener: (listener) => {
+            listeners.push(listener);
+          },
+        };
+      })();
 
       window.addEventListener("message", async (event) => {
         if (event.data.origin !== "${uuid}") return;

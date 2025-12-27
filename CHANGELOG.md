@@ -2,6 +2,16 @@
 
 All notable changes to NearConnect will be documented in this file.
 
+## [1.0.8]
+
+### Fixed
+
+- **Meteor extension bridge for sandboxed executor** - The sandboxed iframe couldn't access `window.meteorCom` due to sandbox restrictions, causing fallback to popup mode even when extension was installed
+  - Added `meteorCom` proxy in sandbox iframe code that bridges to parent window
+  - Added `meteorCom.sendMessageData` handler in executor to forward messages to real extension
+  - Added `setupMeteorComBridge()` to register listener for extension responses
+  - Now when Meteor extension is detected, the sandboxed executor uses it directly instead of opening a popup
+
 ## [1.0.7]
 
 ### Fixed

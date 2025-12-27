@@ -30,19 +30,16 @@ export interface InjectedWalletInfo {
 
 /** Known NEAR wallet extensions and their injection patterns */
 const KNOWN_INJECTED_WALLETS: InjectedWalletInfo[] = [
-  // NOTE: Meteor Wallet extension injects `window.meteorCom` which is a
-  // postMessage communication channel, NOT a wallet provider interface.
-  // Meteor is handled by the sandboxed wallet system (loads executor from manifest).
-  // We only detect `meteorCom` to know the extension is installed, but don't
-  // create an adapter for it - the sandbox handles actual communication.
+  // Meteor extension injects window.meteorCom - a postMessage communication channel.
+  // The actual wallet operations are handled by the sandboxed executor (meteor.js from manifest)
+  // which internally uses the Meteor SDK and meteorCom for communication.
+  // We detect meteorCom to know the extension is installed for UI prioritization.
   {
     id: 'meteor-wallet',
     name: 'Meteor Wallet',
     icon: 'https://wallet.meteorwallet.app/assets/logo.svg',
-    globalKey: 'meteorCom', // Extension injects this communication channel
-    altKeys: ['hotWallet'],
+    globalKey: 'meteorCom',
     website: 'https://wallet.meteorwallet.app',
-    // meteorCom is a comm channel, not a provider - we detect presence only
     usesPostMessageChannel: true,
   },
   {
