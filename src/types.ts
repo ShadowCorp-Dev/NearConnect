@@ -448,6 +448,11 @@ export interface EventMap {
   };
   /** Emitted when all accounts are cleared */
   "account:cleared": Record<string, never>;
+  /** Emitted when an injected wallet is detected */
+  "wallet:detected": {
+    walletId: string;
+    name: string;
+  };
 }
 
 /**

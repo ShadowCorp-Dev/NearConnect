@@ -2,6 +2,19 @@
 
 All notable changes to NearConnect will be documented in this file.
 
+## [1.0.3]
+
+### Added
+
+- **Proactive injected wallet detection** - Detects browser extension wallets (Meteor, Sender, HERE, Nightly) by checking window globals
+  - No longer relies solely on wallets firing `near-wallet-injected` event
+  - Automatic wrapper creation for detected extensions
+  - `wallet:detected` event emitted when extensions are found
+
+### Fixed
+
+- **Meteor extension not detected** - Extensions that don't fire injection events are now detected via window global polling
+
 ## [1.0.2]
 
 ### Added
