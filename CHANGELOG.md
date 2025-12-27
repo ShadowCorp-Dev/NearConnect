@@ -2,6 +2,25 @@
 
 All notable changes to NearConnect will be documented in this file.
 
+## [1.0.4]
+
+### Added
+
+- **Robust hybrid injected wallet detection** - Complete refactor of browser extension detection:
+  - `InjectedWalletDetector` - Hybrid detection with event listening + global probing + retry logic
+  - `InjectedWalletAdapter` - Normalizes different wallet APIs into consistent NearWalletBase interface
+  - `InjectedWalletManager` - Manages detection lifecycle and wallet adapters
+  - Provider validation ensures detected globals are actual wallet providers
+  - Retry intervals (100ms, 250ms, 500ms, 1000ms) catch slow-loading extensions
+  - Multiple ready announcements (`near-selector-ready`, `near-wallet-selector-ready`, `near:ready`)
+  - Supports 6 wallets: Meteor, Sender, HERE, Nightly, MyNearWallet, WELLDONE
+- **`whenInjectedWalletsDetected` promise** - Wait for injected wallet detection to complete
+- **Exported injected wallet module** - `InjectedWalletDetector`, `InjectedWalletAdapter`, `InjectedWalletManager`
+
+### Changed
+
+- `init()` now waits for both manifest loading and injected wallet detection
+
 ## [1.0.3]
 
 ### Added

@@ -10,6 +10,7 @@ import { InjectedWallet } from "./InjectedWallet";
 import { SandboxWallet } from "./SandboxedWallet";
 import { EventMap } from "./types";
 import { WalletError, WalletNotFoundError, UserRejectedError, ErrorCode, wrapError } from "./errors";
+import { InjectedWalletManager } from "./wallets/injected";
 
 /**
  * Connected account with wallet metadata
@@ -98,7 +99,11 @@ export class NearConnector {
   private connectedAccounts: ConnectedAccount[] = [];
   private activeAccountId: string | null = null;
 
+  // Injected wallet manager
+  private injectedManager: InjectedWalletManager;
+
   readonly whenManifestLoaded: Promise<void>;
+  readonly whenInjectedWalletsDetected: Promise<void>;
   readonly whenSessionRestored: Promise<Session | null>;
 
   constructor(options?: NearConnectorOptions) {
@@ -158,6 +163,41 @@ export class NearConnector {
       resolve();
     });
 
+    // Initialize injected wallet manager with detection callback
+    this.injectedManager = new InjectedWalletManager({
+      detectionTimeout: 2000,
+      onDetected: (wallets) => {
+        // Add newly detected wallets (avoiding duplicates)
+        for (const wallet of wallets) {
+          if (!this.wallets.some((w) => w.manifest.id === wallet.manifest.id)) {
+            this.wallets.unshift(wallet);
+            this.events.emit("wallet:detected", {
+              walletId: wallet.manifest.id,
+              name: wallet.manifest.name,
+            });
+          }
+        }
+        this.events.emit("selector:walletsChanged", {});
+      },
+    });
+
+    // Start injected wallet detection
+    this.whenInjectedWalletsDetected = this.injectedManager.init().then((wallets) => {
+      // Add detected wallets to the list
+      for (const wallet of wallets) {
+        if (!this.wallets.some((w) => w.manifest.id === wallet.manifest.id)) {
+          this.wallets.unshift(wallet);
+          this.events.emit("wallet:detected", {
+            walletId: wallet.manifest.id,
+            name: wallet.manifest.name,
+          });
+        }
+      }
+      if (wallets.length > 0) {
+        this.events.emit("selector:walletsChanged", {});
+      }
+    });
+
     if (typeof window !== "undefined") {
       window.addEventListener<any>("near-wallet-injected", this._handleNearWalletInjected);
       window.dispatchEvent(new Event("near-selector-ready"));
@@ -170,9 +210,6 @@ export class NearConnector {
           if (this.autoConnect) this.connect(event.data.manifest.id);
         }
       });
-
-      // Proactively detect common injected wallets that may not fire events
-      this._detectInjectedWallets();
     }
 
     this.whenManifestLoaded.then(() => {
@@ -220,13 +257,16 @@ export class NearConnector {
   }
 
   /**
-   * Initialize the connector and wait for manifest + session restoration.
+   * Initialize the connector and wait for manifest + session restoration + injected wallet detection.
    * This is the recommended way to set up the connector.
    * Returns the restored session if one exists, null otherwise.
    */
   async init(): Promise<Session | null> {
     try {
-      await this.whenManifestLoaded;
+      await Promise.all([
+        this.whenManifestLoaded,
+        this.whenInjectedWalletsDetected,
+      ]);
       const session = await this.whenSessionRestored;
       return session;
     } catch (e) {
@@ -261,192 +301,6 @@ export class NearConnector {
     this.wallets.unshift(new InjectedWallet(this, event.detail as any));
     this.events.emit("selector:walletsChanged", {});
   };
-
-  /**
-   * Known injected wallet configurations for proactive detection
-   */
-  private static INJECTED_WALLET_CONFIGS = [
-    {
-      id: 'meteor-wallet',
-      name: 'Meteor Wallet',
-      icon: 'https://wallet.meteorwallet.app/logo.png',
-      windowKeys: ['meteorWallet', 'near'],
-      website: 'https://wallet.meteorwallet.app',
-    },
-    {
-      id: 'sender-wallet',
-      name: 'Sender Wallet',
-      icon: 'https://sender.org/logo.png',
-      windowKeys: ['sender'],
-      website: 'https://sender.org',
-    },
-    {
-      id: 'here-wallet',
-      name: 'HERE Wallet',
-      icon: 'https://herewallet.app/logo.png',
-      windowKeys: ['here', 'hereWallet'],
-      website: 'https://herewallet.app',
-    },
-    {
-      id: 'nightly-wallet',
-      name: 'Nightly Wallet',
-      icon: 'https://nightly.app/logo.png',
-      windowKeys: ['nightly', 'near'],
-      website: 'https://nightly.app',
-    },
-  ];
-
-  /**
-   * Proactively detect injected wallets by checking window globals
-   */
-  private _detectInjectedWallets(): void {
-    // Small delay to let extensions inject their globals
-    setTimeout(() => {
-      for (const config of NearConnector.INJECTED_WALLET_CONFIGS) {
-        // Skip if already detected
-        if (this.wallets.some(w => w.manifest.id === config.id)) {
-          continue;
-        }
-
-        // Check if any of the window keys exist
-        const detectedKey = config.windowKeys.find(key => {
-          const global = (window as any)[key];
-          return global && typeof global === 'object';
-        });
-
-        if (detectedKey) {
-          const walletGlobal = (window as any)[detectedKey];
-
-          this.logger?.log(`Detected injected wallet: ${config.name} via window.${detectedKey}`);
-
-          // Create a wrapper that bridges the injected wallet to our interface
-          const injectedWallet = this._createInjectedWalletWrapper(config, walletGlobal, detectedKey);
-          if (injectedWallet) {
-            this.wallets.unshift(injectedWallet);
-            this.events.emit("selector:walletsChanged", {});
-            this.events.emit("wallet:detected", { walletId: config.id, name: config.name });
-          }
-        }
-      }
-    }, 300); // Wait 300ms for extensions to inject
-  }
-
-  /**
-   * Create a wrapper for detected injected wallets
-   */
-  private _createInjectedWalletWrapper(
-    config: typeof NearConnector.INJECTED_WALLET_CONFIGS[0],
-    walletGlobal: any,
-    _windowKey: string
-  ): NearWalletBase | null {
-    try {
-      // Create a manifest for the detected wallet
-      const manifest: WalletManifest = {
-        id: config.id,
-        name: config.name,
-        icon: config.icon,
-        website: config.website,
-        description: `${config.name} browser extension`,
-        type: 'injected',
-        version: '1.0.0',
-        executor: '',
-        permissions: {
-          storage: true,
-          external: [config.id],
-        },
-        features: {
-          signMessage: typeof walletGlobal.signMessage === 'function',
-          signTransaction: true,
-          signAndSendTransaction: true,
-          signAndSendTransactions: typeof walletGlobal.signAndSendTransactions === 'function' || typeof walletGlobal.requestSignTransactions === 'function',
-          signInWithoutAddKey: true,
-          mainnet: true,
-          testnet: true,
-        },
-      };
-
-      // Create wrapper that delegates to the injected wallet
-      const wrapper: NearWalletBase = {
-        manifest,
-
-        async signIn(data) {
-          // Try common signIn methods
-          if (typeof walletGlobal.requestSignIn === 'function') {
-            await walletGlobal.requestSignIn({
-              contractId: data?.contractId,
-              methodNames: data?.methodNames,
-            });
-          } else if (typeof walletGlobal.connect === 'function') {
-            await walletGlobal.connect();
-          } else if (typeof walletGlobal.signIn === 'function') {
-            await walletGlobal.signIn(data);
-          }
-
-          return this.getAccounts(data);
-        },
-
-        async signOut(_data) {
-          if (typeof walletGlobal.signOut === 'function') {
-            await walletGlobal.signOut();
-          } else if (typeof walletGlobal.disconnect === 'function') {
-            await walletGlobal.disconnect();
-          }
-        },
-
-        async getAccounts(_data) {
-          // Try common account retrieval methods
-          if (typeof walletGlobal.getAccountId === 'function') {
-            const accountId = await walletGlobal.getAccountId();
-            if (accountId) {
-              return [{ accountId, publicKey: '' }];
-            }
-          }
-          if (typeof walletGlobal.account === 'function') {
-            const account = await walletGlobal.account();
-            if (account?.accountId) {
-              return [{ accountId: account.accountId, publicKey: '' }];
-            }
-          }
-          if (walletGlobal.accountId) {
-            return [{ accountId: walletGlobal.accountId, publicKey: '' }];
-          }
-          if (typeof walletGlobal.getAccounts === 'function') {
-            return await walletGlobal.getAccounts();
-          }
-          return [];
-        },
-
-        async signAndSendTransaction(params) {
-          if (typeof walletGlobal.signAndSendTransaction === 'function') {
-            return await walletGlobal.signAndSendTransaction(params);
-          }
-          throw new Error(`${config.name} does not support signAndSendTransaction`);
-        },
-
-        async signAndSendTransactions(params) {
-          if (typeof walletGlobal.signAndSendTransactions === 'function') {
-            return await walletGlobal.signAndSendTransactions(params);
-          }
-          if (typeof walletGlobal.requestSignTransactions === 'function') {
-            return await walletGlobal.requestSignTransactions(params);
-          }
-          throw new Error(`${config.name} does not support signAndSendTransactions`);
-        },
-
-        async signMessage(params) {
-          if (typeof walletGlobal.signMessage === 'function') {
-            return await walletGlobal.signMessage(params);
-          }
-          throw new Error(`${config.name} does not support signMessage`);
-        },
-      };
-
-      return wrapper;
-    } catch (e) {
-      this.logger?.log(`Failed to create wrapper for ${config.name}:`, e);
-      return null;
-    }
-  }
 
   private async _loadManifest(manifestUrl?: string) {
     const manifestEndpoints = manifestUrl ? [manifestUrl] : defaultManifests;

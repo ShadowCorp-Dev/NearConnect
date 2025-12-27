@@ -310,6 +310,17 @@ export {
   type PendingRequest,
 } from "./wallets/external";
 
+// Injected wallet tier (browser extensions)
+export {
+  InjectedWalletDetector,
+  InjectedWalletAdapter,
+  InjectedWalletManager,
+  type InjectedWalletInfo,
+  type DetectedWallet,
+  type DetectionCallback,
+  type InjectedWalletManagerConfig,
+} from "./wallets/injected";
+
 // Security layers
 export {
   // Transaction verification
