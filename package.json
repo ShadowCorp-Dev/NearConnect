@@ -1,16 +1,17 @@
 {
-  "name": "@hot-labs/near-connect",
-  "version": "0.8.1",
+  "name": "@shadow-corp/nearconnect",
+  "version": "1.0.0",
   "type": "commonjs",
   "main": "./build/index.js",
   "types": "./build/index.d.ts",
   "license": "MIT",
-  "author": "HOT Labs",
+  "author": "Shadow Corp",
+  "description": "NEAR Protocol wallet connector with four-tier architecture and security layers",
   "repository": {
     "type": "git",
-    "url": "https://github.com/hot-dao/near-selector"
+    "url": "https://github.com/ShadowCorp-Dev/NearConnect"
   },
-  "homepage": "https://github.com/hot-dao/near-selector",
+  "homepage": "https://github.com/ShadowCorp-Dev/NearConnect",
   "directories": {
     "build": "build"
   },
@@ -18,9 +19,17 @@
     "build/*"
   ],
   "scripts": {
-    "build:wallets": "cd near-wallets && yarn build:wallets",
-    "build": "rm -rf build && yarn tsc",
+    "build:wallets": "cd near-wallets && npm run build:wallets",
+    "build": "rm -rf build && npx tsc",
     "cdn": "vite build"
+  },
+  "peerDependencies": {
+    "@walletconnect/sign-client": "^2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@walletconnect/sign-client": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@near-js/transactions": "^2.5.1",

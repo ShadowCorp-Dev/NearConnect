@@ -7,7 +7,7 @@
  * - Redirect flows (web wallets on mobile)
  */
 
-import type { Network, Transaction, Account } from '../../types';
+import type { Network, Transaction } from '../../types';
 
 // =============================================================================
 // Types
@@ -325,22 +325,34 @@ export class ExternalWalletManager {
   private async getWalletConnectClient(config: NonNullable<ExternalWalletConfig['walletConnect']>): Promise<unknown> {
     if (this.wcClient) return this.wcClient;
 
-    // Dynamic import WalletConnect
-    // @ts-ignore - WalletConnect is an optional peer dependency
-    const { SignClient } = await import('@walletconnect/sign-client');
+    // Dynamic import WalletConnect - use variable to prevent static analysis
+    // WalletConnect is an optional peer dependency
+    try {
+      const moduleName = '@walletconnect/sign-client';
+      const module = await import(/* @vite-ignore */ /* webpackIgnore: true */ moduleName);
+      const SignClient = module.SignClient || module.default?.SignClient || module.default;
 
-    this.wcClient = await SignClient.init({
-      projectId: config.projectId,
-      relayUrl: config.relayUrl || 'wss://relay.walletconnect.com',
-      metadata: config.metadata || {
-        name: this.config.appName,
-        description: 'NEAR dApp',
-        url: this.config.appUrl,
-        icons: [],
-      },
-    });
+      if (!SignClient?.init) {
+        throw new Error('Invalid WalletConnect module');
+      }
 
-    return this.wcClient;
+      this.wcClient = await SignClient.init({
+        projectId: config.projectId,
+        relayUrl: config.relayUrl || 'wss://relay.walletconnect.com',
+        metadata: config.metadata || {
+          name: this.config.appName,
+          description: 'NEAR dApp',
+          url: this.config.appUrl,
+          icons: [],
+        },
+      });
+
+      return this.wcClient;
+    } catch (error) {
+      throw new Error(
+        'WalletConnect is not installed. To use WalletConnect, run: npm install @walletconnect/sign-client'
+      );
+    }
   }
 
   private async disconnectWalletConnect(): Promise<void> {
