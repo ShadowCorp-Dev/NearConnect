@@ -24,9 +24,16 @@ export class InjectedWalletAdapter implements NearWalletBase {
   readonly manifest: WalletManifest;
   private provider: any;
   private cachedAccounts: Account[] = [];
+  /**
+   * If true, this wallet uses a postMessage channel (like Meteor's meteorCom)
+   * and actual wallet operations should go through the sandboxed executor.
+   * The adapter can detect the extension is installed but can't perform ops directly.
+   */
+  readonly usesPostMessageChannel: boolean;
 
   constructor(wallet: DetectedWallet) {
     this.provider = wallet.provider;
+    this.usesPostMessageChannel = wallet.info.usesPostMessageChannel ?? false;
 
     // Build manifest from detected wallet info
     this.manifest = {
@@ -43,11 +50,12 @@ export class InjectedWalletAdapter implements NearWalletBase {
         external: [wallet.info.id],
       },
       features: {
-        signMessage: typeof this.provider.signMessage === 'function',
+        // For postMessage channel wallets, we can't determine features from provider
+        signMessage: this.usesPostMessageChannel ? true : typeof this.provider.signMessage === 'function',
         signTransaction: true,
-        signAndSendTransaction:
+        signAndSendTransaction: this.usesPostMessageChannel ? true :
           typeof this.provider.signAndSendTransaction === 'function',
-        signAndSendTransactions:
+        signAndSendTransactions: this.usesPostMessageChannel ? true :
           typeof this.provider.signAndSendTransactions === 'function' ||
           typeof this.provider.requestSignTransactions === 'function',
         signInWithoutAddKey: true,
@@ -61,6 +69,15 @@ export class InjectedWalletAdapter implements NearWalletBase {
    * Sign in to the wallet
    */
   async signIn(data?: SignInParams): Promise<Account[]> {
+    // PostMessage channel wallets (like Meteor) can't be operated directly
+    // They need to go through the sandboxed executor from the manifest
+    if (this.usesPostMessageChannel) {
+      throw new Error(
+        `${this.manifest.name} extension detected, but operations must go through sandboxed wallet. ` +
+        `Use the wallet from the manifest, not the injected adapter.`
+      );
+    }
+
     let result: any;
 
     // Different wallets use different method names

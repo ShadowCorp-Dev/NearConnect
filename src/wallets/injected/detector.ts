@@ -19,18 +19,31 @@ export interface InjectedWalletInfo {
   website: string;
   /** Uses HOT Protocol (hotWalletsProviders array) */
   usesHotProtocol?: boolean;
+  /**
+   * Uses postMessage channel (like Meteor's meteorCom).
+   * These wallets inject a communication channel, not a provider interface.
+   * They're detected to know extension is installed, but actual wallet
+   * communication is handled by the sandboxed executor from manifest.
+   */
+  usesPostMessageChannel?: boolean;
 }
 
 /** Known NEAR wallet extensions and their injection patterns */
 const KNOWN_INJECTED_WALLETS: InjectedWalletInfo[] = [
+  // NOTE: Meteor Wallet extension injects `window.meteorCom` which is a
+  // postMessage communication channel, NOT a wallet provider interface.
+  // Meteor is handled by the sandboxed wallet system (loads executor from manifest).
+  // We only detect `meteorCom` to know the extension is installed, but don't
+  // create an adapter for it - the sandbox handles actual communication.
   {
     id: 'meteor-wallet',
     name: 'Meteor Wallet',
     icon: 'https://wallet.meteorwallet.app/assets/logo.svg',
-    globalKey: 'hotWalletsProviders', // Meteor uses HOT Protocol
-    altKeys: ['meteorCom', 'hotWallet'],
+    globalKey: 'meteorCom', // Extension injects this communication channel
+    altKeys: ['hotWallet'],
     website: 'https://wallet.meteorwallet.app',
-    usesHotProtocol: true,
+    // meteorCom is a comm channel, not a provider - we detect presence only
+    usesPostMessageChannel: true,
   },
   {
     id: 'sender',
@@ -168,12 +181,48 @@ export class InjectedWalletDetector {
       // Skip if already detected or uses HOT Protocol (handled separately)
       if (this.detected.has(wallet.id) || wallet.usesHotProtocol) continue;
 
+      // For postMessage channel wallets (like Meteor), just check if global exists
+      // These don't have wallet provider methods - they're communication channels
+      if (wallet.usesPostMessageChannel) {
+        const channel = this.findPostMessageChannel(wallet);
+        if (channel) {
+          console.log(`[NearConnect] Detected ${wallet.name} extension (postMessage channel)`);
+          // Mark as detected but note: actual wallet ops go through sandbox
+          this.addDetected(wallet, channel);
+        }
+        continue;
+      }
+
       const provider = this.findProvider(wallet);
 
       if (provider) {
         this.addDetected(wallet, provider);
       }
     }
+  }
+
+  /**
+   * Find postMessage channel (like window.meteorCom)
+   * These are communication channels, not wallet providers
+   */
+  private findPostMessageChannel(wallet: InjectedWalletInfo): unknown | null {
+    const win = window as unknown as Record<string, unknown>;
+
+    // Check primary key - just needs to exist and be an object
+    if (win[wallet.globalKey] && typeof win[wallet.globalKey] === 'object') {
+      return win[wallet.globalKey];
+    }
+
+    // Check alternative keys
+    if (wallet.altKeys) {
+      for (const key of wallet.altKeys) {
+        if (win[key] && typeof win[key] === 'object') {
+          return win[key];
+        }
+      }
+    }
+
+    return null;
   }
 
   /**

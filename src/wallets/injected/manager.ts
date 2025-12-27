@@ -62,8 +62,20 @@ export class InjectedWalletManager {
 
   /**
    * Add an adapter for a detected wallet
+   * Skips postMessage channel wallets since they need to go through sandboxed executor
    */
   private addAdapter(wallet: DetectedWallet): void {
+    // PostMessage channel wallets (like Meteor) can't be operated directly
+    // They inject a communication channel, not a wallet provider
+    // Actual wallet operations must go through the sandboxed executor from manifest
+    if (wallet.info.usesPostMessageChannel) {
+      console.log(
+        `[NearConnect] ${wallet.info.name} extension detected. ` +
+        `Wallet operations will use sandboxed executor from manifest.`
+      );
+      return;
+    }
+
     const adapter = new InjectedWalletAdapter(wallet);
     this.adapters.set(wallet.info.id, adapter);
   }
@@ -83,10 +95,26 @@ export class InjectedWalletManager {
   }
 
   /**
-   * Check if wallet ID is an injected wallet
+   * Check if wallet ID is an injected wallet (has usable adapter)
    */
   isInjectedWallet(walletId: string): boolean {
     return this.adapters.has(walletId);
+  }
+
+  /**
+   * Check if a wallet extension is detected (including postMessage channel wallets)
+   * Use this to show "extension detected" in the UI even for wallets like Meteor
+   * that need to go through the sandboxed executor
+   */
+  isExtensionDetected(walletId: string): boolean {
+    return this.detector.isAvailable(walletId);
+  }
+
+  /**
+   * Get all detected wallet IDs (including postMessage channel wallets)
+   */
+  getDetectedWalletIds(): string[] {
+    return this.detector.getAll().map((w) => w.info.id);
   }
 
   /**

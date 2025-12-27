@@ -2,6 +2,18 @@
 
 All notable changes to NearConnect will be documented in this file.
 
+## [1.0.7]
+
+### Fixed
+
+- **Meteor detection architecture fix** - Meteor extension injects `window.meteorCom` (a postMessage communication channel), NOT a wallet provider
+  - Detector now checks for `meteorCom` global instead of `hotWalletsProviders`
+  - Added `usesPostMessageChannel` flag to identify wallets that inject communication channels
+  - Manager skips creating adapters for postMessage channel wallets (operations go through sandboxed executor)
+  - Added `isExtensionDetected(walletId)` method to check if extension is installed (even for postMessage wallets)
+  - Added `getDetectedWalletIds()` method to list all detected extensions
+  - Console logs clearly indicate when Meteor extension is detected and that sandbox will be used
+
 ## [1.0.6]
 
 ### Changed
