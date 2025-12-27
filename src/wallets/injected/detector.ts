@@ -17,6 +17,8 @@ export interface InjectedWalletInfo {
   altKeys?: string[];
   /** Website URL */
   website: string;
+  /** Uses HOT Protocol (hotWalletsProviders array) */
+  usesHotProtocol?: boolean;
 }
 
 /** Known NEAR wallet extensions and their injection patterns */
@@ -25,9 +27,10 @@ const KNOWN_INJECTED_WALLETS: InjectedWalletInfo[] = [
     id: 'meteor-wallet',
     name: 'Meteor Wallet',
     icon: 'https://wallet.meteorwallet.app/assets/logo.svg',
-    globalKey: 'meteorWallet',
-    altKeys: ['near'],
+    globalKey: 'hotWalletsProviders', // Meteor uses HOT Protocol
+    altKeys: ['meteorCom', 'hotWallet'],
     website: 'https://wallet.meteorwallet.app',
+    usesHotProtocol: true,
   },
   {
     id: 'sender',
@@ -157,14 +160,63 @@ export class InjectedWalletDetector {
    * Directly probe window globals for known wallets
    */
   private probeGlobals(): void {
+    // First, check HOT Protocol providers (hotWalletsProviders array)
+    this.probeHotProtocol();
+
+    // Then check regular globals
     for (const wallet of KNOWN_INJECTED_WALLETS) {
-      // Skip if already detected
-      if (this.detected.has(wallet.id)) continue;
+      // Skip if already detected or uses HOT Protocol (handled separately)
+      if (this.detected.has(wallet.id) || wallet.usesHotProtocol) continue;
 
       const provider = this.findProvider(wallet);
 
       if (provider) {
         this.addDetected(wallet, provider);
+      }
+    }
+  }
+
+  /**
+   * Probe HOT Protocol providers (used by Meteor and potentially others)
+   * HOT Protocol injects wallet providers into window.hotWalletsProviders array
+   */
+  private probeHotProtocol(): void {
+    const win = window as unknown as Record<string, unknown>;
+    const hotProviders = win['hotWalletsProviders'];
+
+    if (!Array.isArray(hotProviders)) return;
+
+    for (const provider of hotProviders) {
+      if (!provider || typeof provider !== 'object') continue;
+
+      const p = provider as Record<string, unknown>;
+      const providerId = p.id as string | undefined;
+      const providerName = p.name as string | undefined;
+
+      if (!providerId) continue;
+
+      // Skip if already detected
+      if (this.detected.has(providerId)) continue;
+
+      // Find matching known wallet config
+      const knownWallet = KNOWN_INJECTED_WALLETS.find(
+        (w) => w.usesHotProtocol && (w.id === providerId || w.name === providerName)
+      );
+
+      // Create wallet info (use known config or create from provider)
+      const walletInfo: InjectedWalletInfo = knownWallet || {
+        id: providerId,
+        name: providerName || providerId,
+        icon: (p.icon as string) || '',
+        globalKey: 'hotWalletsProviders',
+        website: (p.website as string) || '',
+        usesHotProtocol: true,
+      };
+
+      // Validate it has wallet methods
+      if (this.isValidProvider(provider)) {
+        console.log(`[NearConnect] Detected HOT Protocol wallet: ${walletInfo.name}`);
+        this.addDetected(walletInfo, provider);
       }
     }
   }

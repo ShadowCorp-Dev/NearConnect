@@ -2,6 +2,16 @@
 
 All notable changes to NearConnect will be documented in this file.
 
+## [1.0.5]
+
+### Fixed
+
+- **Meteor Wallet detection** - Meteor uses HOT Protocol, not direct window globals
+  - Added `probeHotProtocol()` to scan `window.hotWalletsProviders` array
+  - Correctly identifies Meteor and other HOT Protocol wallets
+  - Updated Meteor config to use `hotWalletsProviders` as primary key
+  - Added `usesHotProtocol` flag to wallet info for proper routing
+
 ## [1.0.4]
 
 ### Added
